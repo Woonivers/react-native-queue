@@ -24,6 +24,7 @@ export class Queue {
     this.realm = null;
     this.worker = new Worker();
     this.status = 'inactive';
+    this.retry_timer = null
   }
 
   /**
@@ -425,7 +426,44 @@ export class Queue {
 
       });
     }
+  }
 
+  /**
+   *
+   * Add failed jobs back to the queue
+   *
+   * If a retryAfter number is given, we will wait that number of seconds
+   * before resetting them and restarting the queue.
+   *
+   * @param retryAfter {number} - Number of seconds to wait before restarting the
+   * queue. Defaults to 0.
+   */
+
+  retryFailed(retryAfter = 0) {
+    const { realm } = this;
+
+    if (realm !== undefined) {
+
+      const jobs = realm.objects('Job');
+
+      if (jobs.filtered('failed == null').length === 0) {
+
+        console.log('Restarting all failed jobs');
+
+        clearTimeout(this.retry_timer);
+        this.retry_timer = setTimeout(() => {
+          realm.write(() => {
+            jobs.forEach((job) => {
+              job.failed = null;
+              job.active = false;
+            });
+          });
+
+          this.start();
+        }, retryAfter);
+
+      }
+    }
   }
 
 
